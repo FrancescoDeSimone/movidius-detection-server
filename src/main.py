@@ -4,6 +4,7 @@ from mvnc import mvncapi as mvnc
 from utils.ssd_mobilenet_processor import SsdMobileNetProcessor
 from utils.age_processor import AgeNetProcessor
 from utils.gender_processor import GenderNetProcessor
+from utils import visualize_output
 import cv2
 import numpy
 import os
@@ -82,6 +83,7 @@ def main():
 
         for one_obj_detect_proc, one_obj_age_proc, one_obj_gender_proc in zip(obj_detect_list,obj_age_list,obj_gender_list):
             ret, frame = camera.read()
+            send_frame = frame
             one_obj_detect_proc.start_aysnc_inference(frame)
             (detections, display_image) = one_obj_detect_proc.get_async_inference_result()
             if len(detections) > 0:
@@ -90,6 +92,7 @@ def main():
                     payload['class'] = str(object[0])
                     payload['box'] = str(object[1:5])
                     payload['score'] = str(object[5])
+                    send_frame = visualize_output.draw_bounding_box(object[1],object[2],object[3],object[3],send_frame,display_str=str(object[0]))
                     if(payload['class'] == "person"):
                         person = frame
                         (h, w) = person.shape[:2]
@@ -102,10 +105,12 @@ def main():
                             confidence = detections[0,0,i,2];
                             if confidence < 80/100:
                                 continue
-                            one_obj_age_proc.start_aysnc_inference(person,((detections[0,0,i,3:7] * numpy.array([w,h,w,h])).astype("int"))) #  + [-50,-50,+50,+50]))
-                            one_obj_gender_proc.start_aysnc_inference(person,((detections[0,0,i,3:7] * numpy.array([w,h,w,h])).astype("int"))) #  + [-50,-50,+50,+50]))
+                            box_face = ((detections[0,0,i,3:7] * numpy.array([w,h,w,h])).astype("int") + [-50,-50,+50,+50])
+                            one_obj_age_proc.start_aysnc_inference(person,box_face)
+                            one_obj_gender_proc.start_aysnc_inference(person,box_face)
                             (age_prediction, age_detection) = one_obj_age_proc.get_async_inference_result()
                             (gender_prediction, gender_detection) = one_obj_gender_proc.get_async_inference_result()
+                            send_frame = visualize_output.draw_bounding_box(box_face[1],box_face[0],box_face[3],box_face[2],send_frame,display_str=(str(gender_detection)+" - "+str(age_detection)))
                             gender = {}
                             age = {}
                             age['score'] = age_prediction
@@ -117,9 +122,9 @@ def main():
                             payload['gender'] = json.dumps(gender) 
                     print(payload)
                     publish.single("data/"+payload['class'],payload=json.dumps(payload),hostname="localhost")
-                    byte_frame = io.BytesIO()
-                    Image.fromarray(cv2.cvtColor(display_image,cv2.COLOR_BGR2RGB)).save(byte_frame,format="png")
-                    publish.single("frame",payload=str(base64.b64encode(byte_frame.getvalue())),hostname="localhost")
+                    #byte_frame = io.BytesIO()
+                    #Image.fromarray(cv2.cvtColor(send_frame,cv2.COLOR_BGR2RGB)).save(byte_frame,format="png")
+                    #publish.single("frame",payload=str(base64.b64encode(byte_frame.getvalue())),hostname="localhost")
     
 main()
 

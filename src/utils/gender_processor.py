@@ -55,7 +55,9 @@ class GenderNetProcessor:
     def drain_queues(self):
         self._drain_queues()
 
-    def start_aysnc_inference(self, input_image:numpy.ndarray,bound):
+    def start_aysnc_inference(self, input_image:numpy.ndarray,bound:numpy.ndarray):
+        if any(x<0 for x in bound) == True:
+            return
         inference_image, frame = self._pre_process_image(input_image,bound) 
 
         self._inc_async_count()
